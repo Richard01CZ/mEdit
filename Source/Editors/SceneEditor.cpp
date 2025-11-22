@@ -42,6 +42,8 @@ static WNDPROC g_OriginalWndProc = NULL;
 static WNDPROC g_OriginalChildWndProc = NULL;
 
 static bool g_ChangesMade = false;
+static bool flyModeActive = false;
+static bool rmbWasDown = false;
 
 S_vector g_AABBColor(0.57f, 0.96f, 0.55f);
 S_vector g_OBBColor(0.12f, 0.92f, 0.08f);
@@ -1405,31 +1407,47 @@ void SceneEditor::Update() {
 
     ImGuiIO& io = ImGui::GetIO();
 
-    if(m_IGraph->GetMouseButtons() & 2) {
-        if(!m_MouseEnabled) ToggleInput(true);
+    bool rmbIsDown = (m_IGraph->GetMouseButtons() & 2) != 0;
 
+    // Use the SAME safe viewport check, but for RIGHT mouse button
+    bool safeViewportRMB = rmbIsDown && !rmbWasDown && // this detects the actual press
+                           !ImGui::IsAnyItemHovered() && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) && !ImGuizmo::IsOver();
+
+    // Toggle fly mode on RMB press in clean viewport
+    if(safeViewportRMB) { flyModeActive = !flyModeActive; }
+
+    // ESC = instant exit
+    if(ImGui::IsKeyPressed(ImGuiKey_Escape)) flyModeActive = false;
+
+    rmbWasDown = rmbIsDown;
+
+    // === FLY MODE ACTIVE ===
+    if(flyModeActive) {
+        if(!m_MouseEnabled) ToggleInput(true);
         if(m_IsMovingTowardsTarget) m_IsMovingTowardsTarget = false;
 
-        if(m_KeyboardEnabled) {
-            bool isFast = ImGui::IsKeyDown(ImGuiKey_LeftShift);
-            bool isSlow = ImGui::IsKeyDown(ImGuiKey_LeftControl);
+        // Lock cursor to center every frame
+        RECT rect;
+        GetClientRect(m_IGraph->GetMainHWND(), &rect);
+        POINT center = {(rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2};
+        ClientToScreen(m_IGraph->GetMainHWND(), &center);
+        SetCursorPos(center.x, center.y);
 
-            if(ImGui::IsKeyDown(ImGuiKey_W)) { m_TargetCameraVelocity += forwardDir * (isSlow ? 6.5f : (isFast ? 72.5f : 24.5f)); }
-            if(ImGui::IsKeyDown(ImGuiKey_S)) { m_TargetCameraVelocity += forwardDir * -(isSlow ? 6.5f : (isFast ? 72.5f : 24.5f)); }
+        bool isFast = ImGui::IsKeyDown(ImGuiKey_LeftShift);
+        bool isSlow = ImGui::IsKeyDown(ImGuiKey_LeftControl);
+        float speed = isSlow ? 6.5f : (isFast ? 72.5f : 24.5f);
 
-            if(ImGui::IsKeyDown(ImGuiKey_A)) { m_TargetCameraVelocity += rightDir * -(isSlow ? 6.5f : (isFast ? 72.5f : 24.5f)); }
-            if(ImGui::IsKeyDown(ImGuiKey_D)) { m_TargetCameraVelocity += rightDir * (isSlow ? 6.5f : (isFast ? 72.5f : 24.5f)); }
+        if(ImGui::IsKeyDown(ImGuiKey_W)) m_TargetCameraVelocity += forwardDir * speed;
+        if(ImGui::IsKeyDown(ImGuiKey_S)) m_TargetCameraVelocity += forwardDir * -speed;
+        if(ImGui::IsKeyDown(ImGuiKey_A)) m_TargetCameraVelocity += rightDir * -speed;
+        if(ImGui::IsKeyDown(ImGuiKey_D)) m_TargetCameraVelocity += rightDir * speed;
+        if(ImGui::IsKeyDown(ImGuiKey_Q)) m_TargetCameraVelocity += upDir * -speed;
+        if(ImGui::IsKeyDown(ImGuiKey_E)) m_TargetCameraVelocity += upDir * speed;
 
-            if(ImGui::IsKeyDown(ImGuiKey_Q)) { m_TargetCameraVelocity += upDir * -(isSlow ? 6.5f : (isFast ? 72.5f : 24.5f)); }
-            if(ImGui::IsKeyDown(ImGuiKey_E)) { m_TargetCameraVelocity += upDir * (isSlow ? 6.5f : (isFast ? 72.5f : 24.5f)); }
-        }
-
-        auto mouseX = m_IGraph->Mouse_rx();
-        auto mouseY = m_IGraph->Mouse_ry();
-
+        auto mouseX = m_IGraph->Mouse_rx() * 0.22f;
+        auto mouseY = m_IGraph->Mouse_ry() * 0.22f;
         m_CameraRot.x += mouseX;
         m_CameraRot.y += mouseY;
-
         m_CameraRot.x = NormalizeAngle(m_CameraRot.x);
         m_CameraRot.y = Clamp(m_CameraRot.y, -85, 85);
     } else {
@@ -1448,7 +1466,7 @@ void SceneEditor::Update() {
     m_Camera->SetDir(forwardDir, 0);
     m_Camera->Update();
 
-    if(io.MouseClicked[0] && !ImGui::IsAnyItemHovered() && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) && !ImGuizmo::IsOver()) {
+   if(io.MouseClicked[0] && !flyModeActive && !ImGui::IsAnyItemHovered() && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow) && !ImGuizmo::IsOver()) {
         LS3D_RESULT res = m_Scene->UnmapScreenPoint(io.MouseClickedPos[0].x, io.MouseClickedPos[0].y, g_RayOrigin, g_RayDir);
 
         if(res == I3D_OK) {
@@ -1484,7 +1502,7 @@ void SceneEditor::Update() {
             }
         }
     }
-
+    
     m_IGraph->Clear(0xFF000000, 1.0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER);
     if(m_SceneLoaded) {
         m_Scene->Render();
@@ -1928,8 +1946,9 @@ void SceneEditor::Update() {
     ImGui_ImplDX8_NewFrame();
     ImGui::NewFrame();
     ImGuizmo::BeginFrame();
+    ImGuizmo::Enable(!flyModeActive);
 
-    if(!ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
+    if(!flyModeActive) {
         if(ImGui::IsKeyDown(ImGuiKey_LeftControl) && ImGui::IsKeyPressed(ImGuiKey_S)) { Save(m_MissionPath); }
         if(ImGui::IsKeyDown(ImGuiKey_LeftControl) && ImGui::IsKeyPressed(ImGuiKey_C)) {
             if(m_SelectedFrame) { CopyFrame(m_SelectedFrame); }
@@ -3324,6 +3343,10 @@ void SceneEditor::Update() {
 
             setMode = false;
 
+            if(flyModeActive) {
+                ImGui::BeginDisabled();
+            }
+
             ImGui::Checkbox(ICON_FA_BORDER_ALL, &m_ShowTransformGrid);
             if(ImGui::IsItemHovered() && io.KeyShift) {
                 ImGui::BeginTooltip();
@@ -3412,6 +3435,10 @@ void SceneEditor::Update() {
             ImGui::SameLine();
             if(ImGui::InputInt("Grid size", &m_GridSize, 1, 4)) {
                 if(m_GridSize < 0) { m_GridSize = 0; }
+            }
+
+            if(flyModeActive) {
+                ImGui::EndDisabled();
             }
 
             ImGui::End();
