@@ -8,6 +8,8 @@ The goal is to make a project, which would be able to modify all known assets of
 
 Here are the following features within mEdit:
 
+- [ ] Tool Dashboard
+
 - [ ] Scene Editor
   - [x] Scene loading and saving
   - [x] Frame editing (create/destroy/modify)
