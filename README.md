@@ -22,9 +22,9 @@ Here are the following features within mEdit:
   - [ ] Collision editor
   - [ ] Lightmap baking
 - [ ] Text Editor
-  - [ ] Loading and saving TextDB files
+  - [x] Loading and saving TextDB files
   - [ ] Conversion from Windows-1250 to UTF-8 and vice versa
-  - [ ] Text entry modification
+  - [x] Text entry modification
 - [ ] Item Editor
   - [ ] Loading and saving predmety.def
   - [ ] Ability to modify the contents
