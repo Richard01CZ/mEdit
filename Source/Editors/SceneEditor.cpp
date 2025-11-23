@@ -21,6 +21,8 @@
 #include <Game/Actors/Enemy.h>
 #include <Game/Actors/Physical.h>
 
+#include "Editors/TextEditor.h"
+
 #include <Utils/ImGuiUtils.h>
 #include <Utils/WinUtils.h>
 
@@ -37,6 +39,8 @@
 
 std::map<I3D_sound*, std::string> g_SoundsMap;
 std::map<I3D_model*, std::string> g_ModelsMap;
+
+static te::TextEditor s_textEditor;
 
 static WNDPROC g_OriginalWndProc = NULL;
 static WNDPROC g_OriginalChildWndProc = NULL;
@@ -1965,6 +1969,7 @@ void SceneEditor::Update() {
     if(g_Editor->GetSettings()->video.fullscreen) { ImGui::RenderMainMenuBar(m_MenuBar, m_IGraph->GetMainHWND()); }
 
     m_ScriptEditor.Render();
+    s_textEditor.Render(nullptr);
 
     if(ImGui::Begin("Collection", 0, ImGuiWindowFlags_NoCollapse)) {
         if(m_Hierarchy.size() > 0) {
